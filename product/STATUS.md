@@ -4,7 +4,7 @@ Read first. Dates are absolute.
 
 ## Done
 
-- 2026-11-14: v0.1.0. `/agents-flow` panel (docked in fullscreen, inline otherwise), status line while closed, 6 tests, public repo `ludmal/agents-flow` with install instructions and screenshots.
+- 2026-11-14: v0.1.0. `/agents-flow` panel (docked in fullscreen, inline otherwise), status line while closed, 9 tests, public repo `ludmal/agents-flow` with install instructions and screenshots.
 
 ## Pending for owner
 
