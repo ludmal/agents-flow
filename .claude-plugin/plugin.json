@@ -1,0 +1,11 @@
+{
+  "name": "agents-flow",
+  "version": "0.1.0",
+  "description": "A live side panel of the agents working in your Claude Code session: name, model, effort, and an amber progress bar each. Open it with /agents-flow.",
+  "author": { "name": "ludmal", "url": "https://github.com/ludmal" },
+  "homepage": "https://github.com/ludmal/agents-flow",
+  "repository": "https://github.com/ludmal/agents-flow",
+  "license": "MIT",
+  "keywords": ["agents", "subagents", "panel", "progress", "mod"],
+  "types": "./types/index.d.ts"
+}

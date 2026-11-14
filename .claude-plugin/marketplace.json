@@ -1,0 +1,15 @@
+{
+  "name": "agents-flow",
+  "description": "agents-flow: a live side panel of the agents working in your Claude Code session.",
+  "owner": {
+    "name": "ludmal",
+    "url": "https://github.com/ludmal"
+  },
+  "plugins": [
+    {
+      "name": "agents-flow",
+      "source": "./",
+      "description": "A live side panel of the agents working in your Claude Code session: name, model, effort, and an amber progress bar each."
+    }
+  ]
+}
