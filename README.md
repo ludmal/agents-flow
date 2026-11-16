@@ -35,6 +35,7 @@ claude plugin install agents-flow --marketplace ludmal/agents-flow
 | --- | --- |
 | `●` `◐` `✓` `✗` `■` `◌` | Running, waiting for your approval or a reply, done, failed, stopped, idle teammate. |
 | Name | The agent's name, else its type (`Explore`, `developer`). A `general-purpose` agent goes by its task. |
+| Title | The job the agent was given (`Fix web unit tests`), then the step it's on now from its own task or todo list (`· Running the web unit tests`). Not in fullscreen mode, the job sits beside the name. |
 | `sonnet 5.5 · high` | The model and effort the agent's requests actually run with. |
 | `41.0k tok` | Tokens in the agent's context. |
 | Bar | The agent's own task list (`2/4 tasks`) when it keeps one. Otherwise an estimate from how long earlier runs of the same agent type took (`~71% est.`). With no history yet, or once it runs past its usual time, a dim moving shimmer that only means "working". |

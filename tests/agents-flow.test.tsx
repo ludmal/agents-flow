@@ -274,3 +274,67 @@ test('the bar estimates from past runs, then says when it takes longer', async (
   expect(await ui.find({ type: 'Text', text: /taking longer/ })).toBeDefined()
   await ui.unmount()
 })
+
+test('a block titles the job, then the step its task list has in progress', async ($, on) => {
+  engine(on)
+  const clock = mock.clock(on, { now: 1_000_000 })
+  mock.store(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  await $.agent.spawn({ ...SPAWN, description: 'Fix web unit tests' })
+  await clock.advance(1000)
+  let ui = await $.ui.mount({ ...pane('dock', 46), surface: 'terminal' })
+  expect((await ui.find({ type: 'Text', text: 'developer' }))?.text).toBe('developer')
+  expect(await ui.find({ type: 'Text', text: /^Fix web unit tests/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /↳ thinking…/ })).toBeDefined()
+  await ui.unmount()
+
+  await $.tool.call({ tool: 'TaskCreate', subject: 'Run web tests', description: 'x', activeForm: 'Running the web unit tests', agentId: 'a1' } as never)
+  await $.tool.call({ tool: 'TaskUpdate', taskId: '1', status: 'in_progress', agentId: 'a1' } as never)
+  await clock.advance(1000)
+  ui = await $.ui.mount({ ...pane('dock', 46), surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: / · Running the web unit tests/ })).toBeDefined()
+  await ui.unmount()
+
+  await $.tool.call({ tool: 'TaskUpdate', taskId: '1', status: 'completed', agentId: 'a1' } as never)
+  await clock.advance(1000)
+  ui = await $.ui.mount({ ...pane('dock', 46), surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /Running the web unit tests/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^Fix web unit tests/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a todo list in progress titles the step, under a task-named agent too', async ($, on) => {
+  engine(on)
+  const clock = mock.clock(on, { now: 1_000_000 })
+  mock.store(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  await $.agent.spawn({ ...SPAWN, subagentType: 'general-purpose', description: 'Review billing files' })
+  const todos = [
+    { content: 'Read the code', status: 'completed', activeForm: 'Reading the code' },
+    { content: 'Watch the web unit tests', status: 'in_progress', activeForm: 'Watching the web unit tests' },
+  ]
+  await $.tool.call({ tool: 'TodoWrite', todos, agentId: 'a1' } as never)
+  await clock.advance(1000)
+
+  const ui = await $.ui.mount({ ...pane('dock', 46), surface: 'terminal' })
+  expect((await ui.find({ type: 'Text', text: 'Review billing files' }))?.text).toBe('Review billing files')
+  expect(await ui.find({ type: 'Text', text: /^Watching the web unit tests/ })).toBeDefined()
+  expect(await ui.find({ text: /1\/2 todos/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('the inline row carries the job beside the name', async ($, on) => {
+  engine(on)
+  const clock = mock.clock(on, { now: 1_000_000 })
+  mock.store(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  await $.agent.spawn({ ...SPAWN, description: 'Fix web unit tests' })
+  await clock.advance(1000)
+
+  const ui = await $.ui.mount({ ...pane('inline', 140), surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: / · Fix web unit tests/ })).toBeDefined()
+  await ui.unmount()
+})

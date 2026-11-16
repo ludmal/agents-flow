@@ -29,6 +29,12 @@ export type FlowAgent = {
   activity?: string
   // Task ids this agent created or updated, true once completed.
   tasks: Record<string, boolean>
+  // Each task's words for itself: its activeForm, else its subject.
+  labels: Record<string, string>
+  // The task in progress now, an id in `tasks`.
+  stepId?: string
+  // The todo in progress now: its activeForm, else its content.
+  todoStep?: string
   todos?: { done: number; total: number }
   // Median duration of earlier runs of this agent type, when known.
   expectMs?: number

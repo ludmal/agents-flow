@@ -28,7 +28,7 @@ const DOCK_COLUMNS = 46
 const flowState = atom(
   { plugin: 'agents-flow', key: 'flow' } as const,
   { at: 0, agents: [] },
-  { shape: 'flow-1' },
+  { shape: 'flow-2' },
 )
 
 type Dollar = EngineInterface
@@ -46,6 +46,8 @@ type RowView = {
   seed: number
   depth: number
   name: string
+  job: string
+  step: string
   isFinal: boolean
   isMoving: boolean
   look: Look
@@ -172,6 +174,8 @@ const describeCall = (tool: string, input: Record<string, unknown>): string => {
   return tool
 }
 
+const textOf = (value: unknown): string => (typeof value === 'string' ? oneLine(value) : '')
+
 const todosOf = (raw: unknown): { done: number; total: number } | undefined => {
   if (!Array.isArray(raw)) return undefined
   const done = raw.filter(
@@ -181,6 +185,19 @@ const todosOf = (raw: unknown): { done: number; total: number } | undefined => {
       (todo as { status?: unknown }).status === 'completed',
   ).length
   return { done, total: raw.length }
+}
+
+// The todo in progress: 'Running the web unit tests'.
+const todoStepOf = (raw: unknown): string | undefined => {
+  if (!Array.isArray(raw)) return undefined
+  const now = raw.find(
+    todo =>
+      typeof todo === 'object' &&
+      todo !== null &&
+      (todo as { status?: unknown }).status === 'in_progress',
+  ) as { activeForm?: unknown; content?: unknown } | undefined
+  if (now === undefined) return undefined
+  return textOf(now.activeForm) || textOf(now.content) || undefined
 }
 
 const taskIdOf = (result: unknown): string | undefined => {
@@ -199,9 +216,12 @@ const noteTask = (
   ran: { deny?: unknown; isError?: unknown; result?: unknown },
 ): void => {
   if (ran.deny !== undefined || ran.isError === true) return
+  const label = textOf(input.activeForm) || textOf(input.subject)
   if (tool === 'TaskCreate') {
     const id = taskIdOf(ran.result)
-    if (id !== undefined) a.tasks[id] = false
+    if (id === undefined) return
+    a.tasks[id] = false
+    if (label !== '') a.labels[id] = label
     return
   }
   const raw = input.taskId
@@ -210,14 +230,32 @@ const noteTask = (
   const status = input.status
   if (status === 'deleted') {
     delete a.tasks[id]
+    delete a.labels[id]
+    if (a.stepId === id) delete a.stepId
     return
   }
+  if (label !== '') a.labels[id] = label
+  if (status === 'in_progress') a.stepId = id
+  else if ((status === 'completed' || status === 'pending') && a.stepId === id) delete a.stepId
   a.tasks[id] =
     status === 'completed'
       ? true
       : status === 'pending' || status === 'in_progress'
         ? false
         : (a.tasks[id] ?? false)
+}
+
+// What the agent says it is doing now, from its own task or todo list.
+const stepOf = (a: FlowAgent): string => {
+  if (isFinal(a.status)) return ''
+  if (a.stepId !== undefined) return a.labels[a.stepId] ?? ''
+  return a.todoStep ?? ''
+}
+
+// The job it was given, unless its name already says it.
+const jobOf = (a: FlowAgent): string => {
+  const job = oneLine(a.description)
+  return job === '' || a.name === oneLine(a.description, 40) ? '' : job
 }
 
 const parseRuns = (raw: unknown): Record<string, number[]> => {
@@ -346,8 +384,7 @@ const activityOf = (a: FlowAgent, at: number): string => {
     return `${uses} · finished ${ago(at - (a.endedAt ?? at))}`
   }
   if (a.status === 'killed') return 'Stopped'
-  // Before its first tool call: the task, unless the name already says it.
-  return a.activity ?? (a.name === a.description ? 'thinking…' : a.description)
+  return a.activity ?? 'thinking…'
 }
 
 // Built-in types that say nothing about the work: such an agent goes by its task.
@@ -367,6 +404,8 @@ const rowsOf = (flow: Flow): RowView[] =>
       seed: seedOf(a.id),
       depth,
       name: a.name,
+      job: jobOf(a),
+      step: stepOf(a),
       isFinal: isFinal(a.status),
       isMoving: a.status === 'running' || a.status === 'starting',
       look: lookOf(a.status),
@@ -459,6 +498,21 @@ const nameButton = ($: Dollar, t: Table, r: RowView): RenderElement => {
   )
 }
 
+// The job it was given, then the step it is on: 'Fix web unit tests · Running the tests'.
+const titleLine = (t: Table, r: RowView): RenderElement | null => {
+  const { Box, Text } = t
+  if (r.job === '' && r.step === '') return null
+  const step = r.step === '' ? '' : r.job === '' ? r.step : ` · ${r.step}`
+  return (
+    <Box paddingLeft={2}>
+      <Text dimColor={r.isFinal} wrap="truncate-end">
+        {r.job}
+        {step === '' ? null : <Text color={r.look.labelColor}>{step}</Text>}
+      </Text>
+    </Box>
+  )
+}
+
 const dockRow = (
   $: Dollar,
   t: Table,
@@ -479,6 +533,7 @@ const dockRow = (
         </Box>
         <Text dimColor>{r.elapsed}</Text>
       </Box>
+      {titleLine(t, r)}
       <Box justifyContent="space-between" paddingLeft={2}>
         <Text dimColor wrap="truncate-end">
           {r.meta}
@@ -539,11 +594,12 @@ const drawDock = ($: Dollar, t: Table, flow: Flow, cols: number, isTerminal: boo
 const drawInline = ($: Dollar, t: Table, flow: Flow, cols: number, isTerminal: boolean): RenderElement => {
   const { Box, Text, Progress } = t
   const rows = rowsOf(flow)
-  const nameW = 20
   const metaW = 21
   const pctW = 6
   const noteW = 12
   const timeW = 8
+  // The name column takes what the bar leaves, up to room for the job too.
+  const nameW = clamp(cols - metaW - pctW - noteW - timeW - 24, 20, 48)
   const width = clamp(cols - nameW - metaW - pctW - noteW - timeW, 6, 30)
   return (
     <Box flexDirection="column" width={cols}>
@@ -559,6 +615,9 @@ const drawInline = ($: Dollar, t: Table, flow: Flow, cols: number, isTerminal: b
               <Box width={nameW}>
                 {r.depth > 0 ? <Text dimColor>{`${' '.repeat((r.depth - 1) * 2)}└ `}</Text> : null}
                 {nameButton($, t, r)}
+                {r.job === '' && r.step === '' ? null : (
+                  <Text dimColor wrap="truncate-end">{` · ${r.job || r.step}`}</Text>
+                )}
               </Box>
               <Box width={metaW}>
                 <Text dimColor wrap="truncate-end">
@@ -681,6 +740,7 @@ const reconcile = async ($: Dollar, now: number): Promise<void> => {
         startedAt: now,
         tools: 0,
         tasks: {},
+        labels: {},
       })
       continue
     }
@@ -788,6 +848,7 @@ export const register: Register = on => {
       startedAt: now,
       tools: 0,
       tasks: {},
+      labels: {},
     })
     return ran
   }).catch(($, e, next) => next(e))
@@ -831,7 +892,12 @@ export const register: Register = on => {
     a.tools += 1
     a.activity = describeCall(tool, input)
     if (a.status === 'starting') a.status = 'running'
-    if (tool === 'TodoWrite') a.todos = todosOf(input.todos) ?? a.todos
+    if (tool === 'TodoWrite' && Array.isArray(input.todos)) {
+      a.todos = todosOf(input.todos)
+      const step = todoStepOf(input.todos)
+      if (step === undefined) delete a.todoStep
+      else a.todoStep = step
+    }
     if (tool !== 'TaskCreate' && tool !== 'TaskUpdate') return next(e)
     return next(e).then(ran => {
       noteTask(a, tool, input, ran)
